@@ -264,7 +264,7 @@ HIDL CLient端其实只需要使用HIDL编译生成的
 
 通过VINTF接口实现。
 
-<figure><img src=".gitbook/assets/image (1).png" alt=""><figcaption></figcaption></figure>
+<figure><img src=".gitbook/assets/image (1) (1).png" alt=""><figcaption></figcaption></figure>
 
 #### 怎么防止system直接调用vendor？(优化问题   )
 

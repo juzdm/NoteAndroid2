@@ -2,41 +2,39 @@
 
 ## 背景
 
-Android 作为全球搭载设备的最多的移动操作系统，一直存在Android版本碎片化的问题。下图是Android 版本的分布图，相比于竞争对手IOS而言，Android的版本的碎片化问题更为严重。版本的碎片化导致开发者必须花费更多的精力去适配多个SDK版本，并且新功能和安全补丁需要很长的时间才能推送到最终用户手中。
+Android 作为全球搭载设备的最多的移动操作系统，一直面临着Android版本碎片化的问题。下图是Android 版本的分布图，相比于竞争对手IOS而言，Android的版本的碎片化问题更为严重。版本的碎片化导致开发者必须花费更多的精力去适配多个SDK版本，并且新功能和安全补丁需要更长的时间才能推送到最终用户手中。
 
-为了解决此问题，在Android 8.0的时候，引入了Treble Project，对整个Android进行了解耦。Android 作为全球最大的移动端开源操作系统，源码多达100G+，我们来了解Google是如何对这种超大系统进行解耦的，探讨Android Treble解耦背后的实现逻辑的设计思想，也可以为我们进行系统级别的解耦提供参考。
+为了优化此问题，Google在Android 8.0的时候，引入了Android Treble Project，对整个Android从系统架构层面进行了解耦。Android 作为全球最大的移动端开源操作系统，源码多达100G+。我们来了解一下Google是如何对这种超大系统进行解耦的，探讨Android Treble解耦背后的实现逻辑和设计思想，也可以为我们进行系统级别的解耦提供参考。
 
 <figure><img src=".gitbook/assets/image (11).png" alt=""><figcaption><p>Android 版本分布统计图</p></figcaption></figure>
 
 ### Android碎片化的原因
 
-Android碎片化的原因很多，最主要的一个原因是，Google每Release一个Android大版本，都每个手机制造商都得花费很大的精力去做适配，而且整适配过程会持续几个月甚至半年时间。下面是一个传统Android设备的开发流程。传统android设备的开发会经历下面几个阶段：
+Android碎片化的原因很多，最主要的一个原因是，Google自己制造的Android终端设备非常少，大部分Android终端都是有其他手机厂商制造的，所以Android大版本的升级需要下游众多的手机芯片厂商和手机制造商的紧密配合。Google每Release一个Android大版本，都需要手机芯片厂商和手机制造商花费很大的精力去做适配，而且整适配过程会持续几个月甚至半年时间。下面是一个传统Android设备的开发流程，会经历下面几个阶段：
 
-<figure><img src=".gitbook/assets/image (19).png" alt=""><figcaption><p>android 设备开发流程</p></figcaption></figure>
+<figure><img src=".gitbook/assets/image (19).png" alt=""><figcaption><p>传统Android 设备开发流程</p></figcaption></figure>
 
-#### Google Release Android X&#x20;
+#### Google Release Android X 版本&#x20;
 
-Google release开发并且迭代完一个大Android版本之后，首先会把Android源码给到芯片厂商。常见的芯片厂商例如QCOM、MTk等厂商。
+Google release开发并且迭代完一个大Android版本之后，首先会把Android源码给到手机芯片厂商。常见的芯片厂商例如QCOM、MTk等厂商。
 
-#### 芯片厂商
+#### 手机芯片厂商
 
-芯片厂商收到新版本的Android Release之后，在此Release的基础上添加特定芯片平台的SOC代码，包括特定soc平台的linux kernel**驱动**、**dts**(device tree)、**bootloader、TEE**等等。
+芯片厂商收到新版本的Android Release之后，在此Release的基础上添加特定芯片平台的SOC代码，可能包括特定soc平台的内核驱动、引导程序**、**TEE等等。
 
 #### 手机制造商
 
 芯片厂商将加入芯片平台代码的新版本Android源码，release给使用他们芯片的手机制造商。手机制造商加入自己特定设备的修改，并经过几个迭代的测试之后，最终将新版本Android编译打包成OTA升级，通过OTA的方式给终端用户推送更新。
 
-我们可以看到，一个Android版本的从Google Release到推送到终端用户手中，要经历**AOSP -> 芯片厂商 -> 手机制造商**至少三层的迭代开发和测试，整个过程及其漫长。对于手机制造商和芯片厂商来说，适配一个新的Android版本需要花费极大的人力和时间，所以芯片厂商和手机制造商可能没有充足的精力去适配所有的设备，导致新版本Android需要很长时间才能Release到最终用户手中。
+从上面的整个流程我们可以看到，一个Android版本的从Google Release到推送到终端用户手中，要经历**Google -> 芯片厂商 -> 手机制造商**至少三层的迭代开发和测试，整个过程及其漫长。对于手机制造商和芯片厂商来说，适配一个新的Android版本需要花费极大的人力和时间，所以芯片厂商和手机制造商可能没有充足的精力去适配所有的设备，导致新版本Android需要很长时间才能Release到最终用户手中。
 
 ### 解决方案
 
-从Android设备的来发流程中我们可以看到，导致碎片化的原因主要是Android新版本要经过芯片厂商和手机厂商的适配。那么有没有可能，一个新Android版本的Release，不需要或者极大的减少芯片厂商的适配呢，有没有可能将手机制造商（OEM或ODM）、芯片厂商和Android开源部分的代码分离开，各自独立更新和维护？问题的答案就是我们今天要探讨的内容 ---- Android Treble Project。
+从传统Android设备适配新的Android版本的流程中我们可以看到，导致碎片化的原因主要是Android新版本要经过芯片厂商和手机厂商的适配。那么有没有可能，一个新Android版本的Release，不需要或者极大的减少芯片厂商的适配呢，有没有可能将手机制造商、手机芯片厂商和Android开源部分的代码解耦并分离开，各自独立更新和维护？这个问题的答案就是Android Treble Project。
 
 ## Android Treble Project&#x20;
 
-Android Treble Project是Android 8.0引入的系统级解耦方案，官方宣称是Android系统到目前为止最大的一次改动。首先我们看看Android Treble引入前后系统架构的变化。
-
-Android Treble Project是Android 8.0引入的系统级system(aosp部分)和vendor(芯片厂商、手机制造商)组件的解耦方案。是Android系统到目前为止最大的一次重构。关于Android Treble的理论分析请参见[ACM Project Treble](https://dl.acm.org/doi/10.1145/3358237)。
+Android Treble Project是Android 8.0引入的系统级解耦方案，官方宣称是Android系统历史上最大的一次改动。首先我们看看Android Treble引入前后系统架构的变化。关于Android Treble的理论分析请参见[ACM Project Treble](https://dl.acm.org/doi/10.1145/3358237)。
 
 首先我们对比一下Treble重构前后，Android系统框架的变化。
 
@@ -44,39 +42,39 @@ Android Treble Project是Android 8.0引入的系统级system(aosp部分)和vendo
 
 重构前：
 
-<figure><img src=".gitbook/assets/image (9).png" alt=""><figcaption></figcaption></figure>
+<figure><img src=".gitbook/assets/image (9).png" alt=""><figcaption><p>Treble重构前Android架构</p></figcaption></figure>
 
 重构后：
 
-<figure><img src=".gitbook/assets/image (8).png" alt=""><figcaption></figcaption></figure>
+<figure><img src=".gitbook/assets/image (8).png" alt=""><figcaption><p>Treble 解耦后Android架构</p></figcaption></figure>
 
-可以看到重构前后Android架构有以下的变化：
+上图中灰色部分是需要芯片厂商和手机制造商需要适配和修改的部分，称之为**Vendor**，淡黄色部分是Android Framework部分的代码，称之为**System**，蓝色部分是解耦前后新增的部分。可以看到Treble解耦前后，在System和Vendor之间引入了HIDL和VINTF等机制，来实现Vendor和System之间的解耦。解耦之后理想情况下，System和Vendor可以独立升级和维护。
 
-* 新增HIDL接口
-* 新增HIDL接口的hwServiceManager和对应的bind节点/dev/hwbind
-* 将aosp实现和芯片厂商或者手机厂商实现进行分离
-* 新增VTS（供应商测试套件）
-* 新增了vendor分区(芯片厂商或者手机厂商实现)
-* 之前aosp的部分保存在system分区中
-* vendor和system进行独立更新
+~~可以看到重构前后Android架构有以下的变化：~~
+
+* ~~新增HIDL接口~~
+* ~~新增HIDL接口的hwServiceManager和对应的bind节点/dev/hwbind~~
+* ~~将aosp实现和芯片厂商或者手机厂商实现进行分离~~
+* ~~新增VTS（供应商测试套件）~~
+* ~~新增了vendor分区(芯片厂商或者手机厂商实现)~~
+* ~~之前aosp的部分保存在system分区中~~
+* ~~vendor和system进行独立更新~~
 
 ### Treble 重构前后系统升级过程对比
 
-下面的两张图说明了Treble重构前后Android系统的Update过程。
+紧接着我们看一下，解耦前后系统的Update过程。下面的两张图说明了Treble重构前后Android系统的Update过程。
 
 <figure><img src=".gitbook/assets/image (6).png" alt=""><figcaption><p>Treble 重构前系统更新过程</p></figcaption></figure>
 
-Treble重构前，芯片厂商和手机厂商要对vendor的实现代码进行rework。
+Treble重构前，芯片厂商和手机厂商要对Vendor的实现代码进行适配，并进行测试验证。
 
 <figure><img src=".gitbook/assets/image (16).png" alt=""><figcaption><p>Treble重构之后更新过程</p></figcaption></figure>
 
-Treble重构后，AOSP修改Framework之后，芯片厂商和手机厂商不需要对system仓做任何的修改。
-
-**衔接**
+Treble重构后，AOSP修改Framework之后，芯片厂商和手机厂商不需要对system仓做任何的修改，新版本的Android Framework就可以在Original vendor上面运行。
 
 ### Treble 架构概述
 
-进入到treble的实现之前，我们先思考一下，如何将一个软件系统分割成两个彼此独立又依赖的子系统，并且两个子系统可以独立的演进和升级，同时又保证了功能的完整性和可用性。
+在探索treble的实现之前，我们先思考一下，如何将一个软件系统分割成两个彼此独立又依赖的子系统，并且两个子系统可以独立的演进和升级，同时又保证了功能的完整性和可用性。
 
 可以想想得到，最常见的处理方法如下：
 
@@ -84,24 +82,18 @@ Treble重构后，AOSP修改Framework之后，芯片厂商和手机厂商不需�
 2. 其次，定义两个子系统之间的IPC方式
 3. 两个子系统的版本的兼容性处理
 
-Treble也是按照这个思路进行重构，由于Android在嵌入式场景下的使用，Treble在性能和安全性方面有较多的考虑，下面让我们分析Treble在这几个方面的实现方法以及在其他层面特有的实现。
+Treble也是按照这个思路进行重构，由于Android在嵌入式场景下的使用，Treble在性能和安全性方面有较多的考虑，下面是Treble在这几个方面的实现方法以及在其他层面特有的实现。
 
 * Interface的定义
   * [ ] Android 系统使用多种语言开发，Interface的Service和Client端可能是c++、java甚至rust，所以Interface的定义需要与具体的编程语言无关
 * IPC 方式的选择
   * [ ] 如果使用IPC的方式，肯定会增加资源消耗，并且增加性能开销，这种增加是否是可接受的？
-  * [ ] 对于资源较少的嵌入式设备，是否会造成极大的性能开销，是否有兼容方式？
-* Server端怎么处理
-  * [ ] Service端能否按需启动？这样在资源又限的嵌入式设备上，会更节省资源。
-* Client端怎么调用
+  * [ ] 对于资源较少的嵌入式设备，可能会造成极大的性能开销，所以有兼容的运行方式，不通过IPC
+* Server端
+  * [ ] Service端能支持按需启动，这样在资源又限的嵌入式设备上，会更节省资源。
+* Client端
   * [ ] Client端调用的时候能否不指定Service的版本号，通过统一的接口进行
 * 如何进行接口兼容性的处理
-* 如何避免除了IPC规定之外的调用
-
-解耦相关的放一起
-
-* 设计层面（）
-* 实施层面
 
 ### Interface 定义
 
@@ -236,44 +228,114 @@ Server端只需要实现的操作如下：
 
 详细实现可以参考：frameworks/native/libs/binder/LazyServiceRegistrar.cpp
 
+### Manifests & matrixes
 
+Treble使用Manifests和matrixes来描述被解耦的系统组件(Framework)和芯片组件(device或者vendor)之间的接口依赖。
 
-### Client端调用HIDL接口
+<figure><img src=".gitbook/assets/image.png" alt=""><figcaption></figcaption></figure>
 
-HIDL CLient端其实只需要使用HIDL编译生成的
+Manifest 描述了提供给对方的feature， Matrix 描述了需要对方提供的feature。Device和Framework分别有一个Manifest和Matrix，描述自己提供的feature和自己依赖的feature。Manifest 和 Matrix 在OTA升级前会进行匹配检查，以确保framework和device是兼容的。
 
-#### 解耦的各个部分，如何知道彼此的能力，并且描述自己需要的能力？
+#### Device manifest
 
-通过VINTF接口实现。
+Device manifest由芯片厂商或者手机制造商提供，包含供应商清单(vendor manifest)和 ODM manifest，device manifest中包含了所有的vendor提供的feature。Device manifest的特点如下：
 
-<figure><img src=".gitbook/assets/image (1).png" alt=""><figcaption></figcaption></figure>
+1. Fragment化。不同的模块管理自己的manifest Fragment，便于维护。编译系统提供了对不同的Fragment进行merge的机制，最终生效的是一合并之后的一个整体的manifest文件。这样的优点是升级过程。
+2. 继承机制。谷歌提供了最基本的manifest，然后芯片厂商基于谷歌提供的模版进行扩充和删减，然后手机制造商又基于芯片厂商的进行修改。
+3. 可覆盖。Device manifest提供了override属性，这样可以避免芯片厂商或者手机厂商修改到Google源码配置的manifest的情况，最大程度解耦。
 
-#### 怎么防止system直接调用vendor？(优化问题   )
+下面是一个Device manifest的范例：
 
-传统的linux系统调用lib过程：
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Comments, Legal notices, etc. here -->
+<manifest version="1.0" type="device">
+    <!-- NFC is declared to be disabled -->
+    <hal override="true">
+        <name>android.hardware.nfc</name>
+        <transport>hwbinder</transport>
+    </hal>
+    <hal>
+        <name>android.hardware.power</name>
+        <transport>hwbinder</transport>
+        <version>1.1</version>
+        <interface>
+            <name>IPower</name>
+            <instance>default</instance>
+        </interface>
+    </hal>
+</manifest>
+```
 
-* 找到库的路径（vendor的库都在公共目录下，vendor/lib 或者vendor/lib64等）
-* 加载库
-* 调用函数
+#### Framework manifest
 
-解决方案：
+Framework manifest是由 Google 提供的，用于描述Framework manifest的feature的文件，此文件用来说明，Framework给vendor提供的feature，位于 Android 源代码树的 /system/libhidl/manifest.xm。
 
-Android在第二步进行阻断，通过selinux 规则限制system不能调用任何vendor的lib或者函数。
+Framework manifest和Device manifest使用相同的格式，通过属性区分是Framework和Device manifest，最大程度的降低复杂性。
 
-* 增加selinux规则，给system和vendor分区的可执行程序、lib库、config文件强制打selinux标签
-* 通过not allow selinux规则文件，禁止跨system、vendor分区的文件访问。
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Comments, Legal notices, etc. here -->
+<manifest version="1.0" type="framework">
+    <hal>
+        <name>android.hidl.allocator</name>
+        <transport>hwbinder</transport>
+        <version>1.0</version>
+        <interface>
+            <name>IAllocator</name>
+            <instance>ashmem</instance>
+        </interface>
+    </hal>
+</manifest>
+```
 
-android selinux 可参考《SELinux for Android 8.0》
+### Compatibility Matrixes
 
-[https://opensource.com/business/13/11/selinux-policy-guide](https://opensource.com/business/13/11/selinux-policy-guide)
+兼容矩阵用来描述不同组件对设备的要求，分为Device compatibility matrix (DCM)和Framework compatibility matrix (FCM)，二者复用格式，通过属性区分。此文件用来描述Framework对Device的要求，或者device对Framework的要求。为了及早的发现Framework和Device的不兼容性，Google把兼容性检查提前到了编译阶段。然后再下面的场景也会进行兼容性矩阵校验
 
+1. 对于OTA升级的场景。
+2. 开机
 
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Comments, Legal notices, etc. here -->
+<compatibility-matrix version="1.0" type="framework" level="3">
+    <hal>
+        <name>android.hardware.nfc</name>
+        <version>1.0</version>
+        <interface>
+            <name>INfc</name>
+            <instance>default</instance>
+        </interface>
+    </hal>
+    <hal optional="true">
+        <name>android.hardware.graphics.composer</name>
+        <version>2.1</version>
+        <interface>
+            <name>IComposer</name>
+            <instance>default</instance>
+        </interface>
+    </hal>
+</compatibility-matrix>
+```
+
+##
 
 ## 总结
 
-对于一个开源嵌入式操作系统，如何加速设备制造商和芯片厂商的适配速度，如何将新版本快速的推送到终端用户，并且尽可能的减少设备制造商和芯片厂商的参与，一直是一个难题。Android Treble给我们提供了一种这种问题的解决思路和参考，尤其是面对Android这种超大系统。
+观点: 启示
 
-解耦，
+
+
+解耦：
+
+_复杂_
+
+_未成功_
+
+设计
+
+对于一个开源嵌入式操作系统，如何加速设备制造商和芯片厂商的适配速度，如何将新版本快速的推送到终端用户，并且尽可能的减少设备制造商和芯片厂商的参与，一直是一个难题。Android Treble给我们提供了一种这种问题的解决思路和参考，尤其是面对Android这种超大系统。
 
 
 
