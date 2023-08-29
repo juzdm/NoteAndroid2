@@ -319,9 +319,11 @@ Framework manifest和Device manifest使用相同的格式，通过属性区分�
 </compatibility-matrix>
 ```
 
-##
-
 ## 总结
+
+Android Treble Project对Android架构进行了解耦，从整体上将Android Framework(system) 和Vendor(主要是芯片厂商和手机厂商实现的和具体设备相关的代码)进行分离，使Android碎片化问题的解决成为可能。Android Treble
+
+
 
 观点: 启示
 
